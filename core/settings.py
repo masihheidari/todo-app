@@ -47,10 +47,12 @@ INSTALLED_APPS = [
     "drf_yasg",
     "rest_framework_simplejwt", 
     "rest_framework_simplejwt.token_blacklist",
+    "debug_toolbar",
 
 ]
 
 MIDDLEWARE = [
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -156,7 +158,9 @@ REST_FRAMEWORK = {
         'burst': '60/min',
         'sustained': '1000/day',
         'resend_verification': '3/hour',
-    }
+    },
+    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+
 }
 
 
@@ -201,3 +205,8 @@ CELERY_BEAT_SCHEDULE = {
         "options": {"expires": 540},
     },
 }
+
+import socket
+
+hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
+INTERNAL_IPS = [ip[: ip.rfind(".")] + ".1" for ip in ips] + ["127.0.0.1"]

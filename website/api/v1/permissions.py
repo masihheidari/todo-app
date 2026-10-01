@@ -1,26 +1,4 @@
-from datetime import timedelta
-
-from django.utils import timezone
 from rest_framework import permissions
-
-
-class IsWithin24HoursAndNotDone(permissions.BasePermission):
-    """Allow changes only during the first 24 hours and while not done."""
-
-    def has_object_permission(self, request, view, obj):
-        now = timezone.now()
-        time_since_creation = now - obj.created_date
-        day_hours = timedelta(hours=24)
-        # Reading (GET, HEAD, OPTIONS) is always allowed
-        if request.method in permissions.SAFE_METHODS:
-            return True
-        # Too old to modify
-        if time_since_creation > day_hours:
-            return False
-        # Finished tasks are locked
-        if obj.is_done:
-            return False
-        return True
 
 
 class IsOwner(permissions.BasePermission):

@@ -1,5 +1,6 @@
 import pytest
 from rest_framework.test import APIClient
+from django.core.cache import cache
 
 
 @pytest.fixture
@@ -45,3 +46,7 @@ def use_local_memory_cache(settings):
     settings.CACHES = {
         "default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}
     }
+    # Start every test with an empty cache so tests don't affect each other
+    cache.clear()
+    yield
+    cache.clear()

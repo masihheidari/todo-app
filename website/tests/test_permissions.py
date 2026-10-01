@@ -4,8 +4,7 @@ from rest_framework.test import APIRequestFactory
 from users.tests.factories import CustomUserFactory
 from website.api.v1.permissions import (
     IsAdminOrTeacher,
-    IsOwner,
-    IsWithin24HoursAndNotDone,
+    IsOwner
 )
 from website.tests.factories import TaskFactory
 
@@ -51,24 +50,3 @@ class TestIsAdminOrTeacher:
         request = factory.get("/")
         request.user = teacher
         assert IsAdminOrTeacher().has_permission(request, None) is True
-
-
-@pytest.mark.django_db
-class TestIsWithin24HoursAndNotDone:
-    def test_recent_and_not_done_allowed(self):
-        task = TaskFactory(is_done=False)
-        request = factory.patch("/")  # PATCH is not a safe method
-        request.user = task.author
-        assert (
-            IsWithin24HoursAndNotDone().has_object_permission(request, None, task)
-            is True
-        )
-
-    def test_done_task_denied(self):
-        task = TaskFactory(is_done=True)
-        request = factory.patch("/")
-        request.user = task.author
-        assert (
-            IsWithin24HoursAndNotDone().has_object_permission(request, None, task)
-            is False
-        )

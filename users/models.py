@@ -7,17 +7,13 @@ class UserManager(BaseUserManager):
     """Custom manager: users log in with email instead of username."""
 
     def create_user(self, email, password=None, **extra_fields):
-        # Email is the login identifier, so it is mandatory
         if not email:
             raise ValueError(_("Users must have an email address"))
-        # Lowercases the domain part (Ali@EXAMPLE.COM -> Ali@example.com)
         email = self.normalize_email(email)
-        user = self.model(email=email, **extra_fields)
-        # Hash the password; never store it in plain text
-        user.set_password(password)
-        # NOTE: this runs after the model is built, so it has no effect here.
-        # New users are inactive because of the model's is_active default.
+        # New users stay inactive until they verify their email
         extra_fields.setdefault("is_active", False)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
         user.save()
         return user
 

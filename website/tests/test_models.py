@@ -7,6 +7,7 @@ def test_marking_done_sets_finished_date(db):
 
     task.is_done = True
     task.save()
+    # Reload to make sure the value was really saved to the database
     task.refresh_from_db()
 
     assert task.finished_date is not None

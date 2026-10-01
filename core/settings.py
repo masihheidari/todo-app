@@ -10,10 +10,11 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-from pathlib import Path
-from decouple import config
 from datetime import timedelta
+from pathlib import Path
+
 from celery.schedules import crontab
+from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -23,11 +24,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
+# Values come from the .env file / environment variables (python-decouple)
 SECRET_KEY = config("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", cast=bool)
 
+# Comma-separated list in .env, e.g. "localhost, 127.0.0.1"
 ALLOWED_HOSTS = config(
     "ALLOWED_HOSTS", cast=lambda v: [s.strip() for s in v.split(",")]
 )
@@ -41,18 +44,20 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # Project apps
     "website",
     "users",
-    "rest_framework", 
-    "drf_yasg",
-    "rest_framework_simplejwt", 
-    "rest_framework_simplejwt.token_blacklist",
-    "debug_toolbar",
-
+    # Third-party apps
+    "rest_framework",  # Django REST framework
+    "drf_yasg",  # Swagger / ReDoc docs
+    "rest_framework_simplejwt",  # JWT authentication
+    "rest_framework_simplejwt.token_blacklist",  # lets us blacklist refresh tokens
+    "debug_toolbar",  # development only
 ]
 
+# Order matters: requests go top to bottom, responses bottom to top
 MIDDLEWARE = [
-    'debug_toolbar.middleware.DebugToolbarMiddleware',
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -62,15 +67,16 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# Root URL configuration (core/urls.py)
 ROOT_URLCONF = "core.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            BASE_DIR / "templates",
+            BASE_DIR / "templates",  # project-level templates folder
         ],
-        "APP_DIRS": True,
+        "APP_DIRS": True,  # also look inside each app's templates/ folder
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.request",
@@ -87,6 +93,7 @@ WSGI_APPLICATION = "core.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
+# PostgreSQL; all connection details are read from the environment
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
@@ -97,6 +104,7 @@ DATABASES = {
         "PORT": config("POSTGRES_PORT"),
     }
 }
+# Redis is used for the cache (db 1) and for Celery (db 2), see below
 REDIS_HOST = config("REDIS_HOST", default="localhost")
 REDIS_PORT = config("REDIS_PORT", default=6379, cast=int)
 
@@ -105,15 +113,19 @@ REDIS_PORT = config("REDIS_PORT", default=6379, cast=int)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
+        # Rejects passwords too similar to the user's email/name
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
+        # Minimum length (default 8)
         "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
+        # Rejects very common passwords like "password123"
         "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
+        # Rejects passwords made only of digits
         "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
@@ -128,6 +140,7 @@ TIME_ZONE = "UTC"
 
 USE_I18N = True
 
+# Store datetimes as timezone-aware (UTC) values
 USE_TZ = True
 
 
@@ -135,42 +148,50 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = "/static/"
+# Where collectstatic gathers files for production
 STATIC_ROOT = BASE_DIR / "static"
 
+# User-uploaded files
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+# Extra folders (besides app static/ folders) where static files are searched
 STATICFILES_DIRS = [
     BASE_DIR / "staticfiles",
 ]
 
 
-
+# Use our custom user model (email login) instead of Django's default
 AUTH_USER_MODEL = "users.CustomUser"
 
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
+    # Try JWT first, then fall back to session login (e.g. admin / browsable API)
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'burst': '60/min',
-        'sustained': '1000/day',
-        'resend_verification': '3/hour',
+    # Named rate limits; a view picks one with throttle_scope
+    "DEFAULT_THROTTLE_RATES": {
+        "burst": "60/min",
+        "sustained": "1000/day",
+        "resend_verification": "3/hour",  # used by ResendVerificationEmailView
     },
-    'TEST_REQUEST_DEFAULT_FORMAT': 'json',
-
+    # Tests send JSON by default
+    "TEST_REQUEST_DEFAULT_FORMAT": "json",
 }
 
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
+    # Short-lived access token, longer-lived refresh token
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    # Issue a new refresh token on each refresh and blacklist the old one
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
 }
 
+# Redis cache (database 1). Email verification tokens are stored here.
 CACHES = {
     "default": {
         "BACKEND": "django_redis.cache.RedisCache",
@@ -178,35 +199,47 @@ CACHES = {
         "OPTIONS": {
             "CLIENT_CLASS": "django_redis.client.DefaultClient",
         },
-        "TIMEOUT": 300,  
+        "TIMEOUT": 300,  # default expiry in seconds (5 min)
     }
 }
+# If Redis is down, log the error instead of crashing the request
 DJANGO_REDIS_LOG_IGNORED_EXCEPTIONS = True
 
-CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/2"
-CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/2"
+# Celery (database 2 of the same Redis server).
+# Settings with the CELERY_ prefix are loaded in core/celery.py
+CELERY_BROKER_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/2"  # task queue
+CELERY_RESULT_BACKEND = f"redis://{REDIS_HOST}:{REDIS_PORT}/2"  # task results
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
+# Development: print emails to the console instead of sending them
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 DEFAULT_FROM_EMAIL = "noreply@todoapp.local"
+# Base URL used to build links in emails (e.g. the verification link)
 BACKEND_URL = config("BACKEND_URL", default="http://localhost:8001")
 
 # EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
 # EMAIL_FILE_PATH = BASE_DIR / 'sent_emails'
+
+# Unverified accounts older than this are deleted by cleanup_expired_items
 UNVERIFIED_USER_RETENTION = timedelta(days=3)
 
+# Periodic tasks run by Celery Beat
 CELERY_BEAT_SCHEDULE = {
     "cleanup-expired-items": {
-        "task": "cleanup_expired_items",
-        "schedule": crontab(minute="*/10"),
+        "task": "cleanup_expired_items",  # name set in users/tasks.py
+        "schedule": crontab(minute="*/10"),  # every 10 minutes
+        # Drop the run if it wasn't picked up within 540s (9 min), so runs
+        # don't pile up before the next one is scheduled
         "options": {"expires": 540},
     },
 }
 
 import socket
 
+# Debug toolbar only shows for these IPs. This is needed inside Docker, where
+# requests come from the container network (the gateway usually ends in ".1").
 hostname, _, ips = socket.gethostbyname_ex(socket.gethostname())
 INTERNAL_IPS = [ip[: ip.rfind(".")] + ".1" for ip in ips] + ["127.0.0.1"]

@@ -16,12 +16,14 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path, include
-from rest_framework import permissions
-from drf_yasg.views import get_schema_view
+from django.urls import include, path
 from drf_yasg import openapi
+from drf_yasg.views import get_schema_view
+from rest_framework import permissions
+from django.conf import settings
 
-
+# Swagger / ReDoc API documentation (drf_yasg).
+# public=True + AllowAny means anyone can open the docs, even without login.
 schema_view = get_schema_view(
     openapi.Info(
         title="Snippets API",
@@ -38,8 +40,11 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    # Each app defines its own routes in its urls.py
     path("website/", include("website.urls")),
     path("users/", include("users.urls")),
+    # API docs: raw schema (JSON), Swagger UI and ReDoc.
+    # cache_timeout=0 disables caching so docs always reflect the latest code.
     path(
         "swagger/output",
         schema_view.without_ui(cache_timeout=0),
@@ -55,19 +60,14 @@ urlpatterns = [
         schema_view.with_ui("redoc", cache_timeout=0),
         name="schema-redoc",
     ),
-
-
-
 ]
 
-from django.conf import settings
 
-
+# Debug toolbar is only available in development (DEBUG=True)
 if settings.DEBUG:
     import debug_toolbar
+
+    # Put its URLs first so they take priority
     urlpatterns = [
         path("__debug__/", include(debug_toolbar.urls)),
-
     ] + urlpatterns
-
-

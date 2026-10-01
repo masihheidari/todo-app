@@ -1,4 +1,3 @@
-# website/apps.py
 from django.apps import AppConfig
 
 
@@ -7,4 +6,6 @@ class WebsiteConfig(AppConfig):
     name = "website"
 
     def ready(self):
-        import website.signals 
+        # Importing the module registers the signal receivers.
+        # The import looks unused to flake8, hence the noqa.
+        import website.signals  # noqa: F401

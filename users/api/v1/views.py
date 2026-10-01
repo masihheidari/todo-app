@@ -1,146 +1,233 @@
-from rest_framework import generics
-from rest_framework import status
-from rest_framework.response import Response
-from rest_framework.authtoken.views import ObtainAuthToken
-from rest_framework.authtoken.models import Token
-from rest_framework.views import APIView
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.exceptions import TokenError
+# users/tests/test_views.py
+from unittest.mock import patch
+
+import pytest
 from django.core.cache import cache
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.throttling import ScopedRateThrottle
-from .serializer import *
+from django.urls import reverse
+from rest_framework import status
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from users.tests.factories import CustomUserFactory
 
 
-class CreateCustomUserView(generics.CreateAPIView):
-    serializer_class = RegistrationSerializer
-    permission_classes = [AllowAny]    
-    
-    
-class RetrieveUserView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = CustomUserSerializer
-    permission_classes = [IsAuthenticated]
-    
-    def get_object(self):
-        return self.request.user
-    
-    
-class UsersListView(generics.ListAPIView):
-    queryset = CustomUser.objects.all()
-    serializer_class = AdminUserSerializer
-    permission_classes = [IsAdminUser]
-    
-    
-class ChangePasswordView(APIView):
-    permission_classes = [IsAuthenticated]
-    
-    def post(self, request):
-        serializer = ChangePasswordSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        user = request.user
-        
-        if not user.check_password(serializer.validated_data['old_password']):
-            return Response({'detail':'old password is wrong'}, status=status.HTTP_400_BAD_REQUEST)
-        user.set_password(serializer.validated_data['new_password'])
-        user.save()
-
-        return Response({"detail": "password changed successfully"}, status=200)
-    
-    
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        try:
-            refresh_token = request.data["refresh"]
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response(status=status.HTTP_205_RESET_CONTENT)
-        except KeyError:
-            return Response(
-                {"detail": "this field is required"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except TokenError:
-            return Response(
-                {"detail": "invalid token"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
+@pytest.fixture
+def client():
+    # Overrides pytest-django's default `client` with a DRF API client
+    return APIClient()
 
 
-class VerifyEmailView(APIView):
-    permission_classes = [AllowAny]
+def auth(client, user):
+    """Log the client in as `user` without going through the login endpoint."""
+    client.force_authenticate(user=user)
+    return client
 
-    def get(self, request):
-        token = request.query_params.get('token')
 
-        if not token:
-            return Response(
-                {"detail": "token not sent "},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+@pytest.mark.django_db
+class TestRegistrationView:
+    url = reverse("users:api-v1:registration")
 
-        cache_key = f"email_verify:{token}"
-        user_id = cache.get(cache_key)
+    # Mock the task and token so no real email/cache work happens
+    @patch("users.api.v1.serializer.send_verification_email_task")
+    @patch("users.api.v1.serializer.generate_verification_token")
+    def test_register_success_creates_inactive_user(
+        self, mock_token, mock_email, client
+    ):
+        mock_token.return_value = "tok"
+        data = {
+            "email": "new@example.com",
+            "username": "newuser",
+            "password": "StrongPass123",
+            "password1": "StrongPass123",
+        }
+        response = client.post(self.url, data, format="json")
 
-        if user_id is None:
-            return Response(
-                {"detail": " the link is invalid or expired "},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        assert response.status_code == status.HTTP_201_CREATED
+        mock_email.delay.assert_called_once()
 
-        try:
-            user = CustomUser.objects.get(id=user_id)
-        except CustomUser.DoesNotExist:
-            return Response(
-                {"detail": " user not found "},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+    def test_register_duplicate_email_fails(self, client):
+        CustomUserFactory(email="taken@example.com")
+        data = {
+            "email": "taken@example.com",
+            "username": "someone",
+            "password": "StrongPass123",
+            "password1": "StrongPass123",
+        }
+        response = client.post(self.url, data, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
 
-        user.is_active = True
-        user.save()
 
-        cache.delete(cache_key)
+@pytest.mark.django_db
+class TestProfileView:
+    url = reverse("users:api-v1:profile")
 
-        return Response(
-            {"detail": " account successfully activated "},
-            status=status.HTTP_200_OK
+    def test_requires_authentication(self, client):
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_returns_own_data(self, client):
+        user = CustomUserFactory(email="me@example.com")
+        response = auth(client, user).get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["email"] == "me@example.com"
+
+
+@pytest.mark.django_db
+class TestUsersListView:
+    url = reverse("users:api-v1:users-list")
+
+    def test_student_forbidden(self, client):
+        student = CustomUserFactory()
+        response = auth(client, student).get(self.url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+    def test_staff_user_allowed(self, client):
+        staff = CustomUserFactory(is_staff=True)
+        response = auth(client, staff).get(self.url)
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_admin_role_without_is_staff_is_still_forbidden(self, client):
+        # Access depends on is_staff, not on role="admin"
+        fake_admin = CustomUserFactory(admin=False, role="admin", is_staff=False)
+        response = auth(client, fake_admin).get(self.url)
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
+
+@pytest.mark.django_db
+class TestChangePasswordView:
+    url = reverse("users:api-v1:change-password")
+
+    def test_wrong_old_password_fails(self, client):
+        user = CustomUserFactory()
+        response = auth(client, user).post(
+            self.url,
+            {
+                "old_password": "wrong",
+                "new_password": "NewStrong123",
+                "new_password1": "NewStrong123",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_success_changes_password(self, client):
+        user = CustomUserFactory()  # factory default password: pass12345
+        response = auth(client, user).post(
+            self.url,
+            {
+                "old_password": "pass12345",
+                "new_password": "NewStrong123",
+                "new_password1": "NewStrong123",
+            },
+            format="json",
         )
 
-class CustomTokenObtainPairView(TokenObtainPairView):
-    serializer_class = CustomTokenObtainPairSerializer
-    
-    
-    
-class ResendVerificationEmailView(APIView):
-    permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = 'resend_verification'
+        assert response.status_code == status.HTTP_200_OK
+        # Reload from the DB to see the saved password hash
+        user.refresh_from_db()
+        assert user.check_password("NewStrong123")
 
-    def post(self, request):
-        serializer = ResendVerificationEmailSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
 
-        user = CustomUser.objects.filter(email=email).first()
+@pytest.mark.django_db
+class TestTokenObtainView:
+    url = reverse("users:api-v1:token_obtain_pair")
 
-        generic_response = Response(
-            {"detail": "if an account with this email exists, a verification link has been sent"},
-            status=status.HTTP_200_OK
+    def test_active_user_logs_in(self, client):
+        user = CustomUserFactory(is_active=True)
+        response = client.post(
+            self.url,
+            {
+                "email": user.email,
+                "password": "pass12345",
+            },
+            format="json",
         )
+        assert response.status_code == status.HTTP_200_OK
+        assert "access" in response.data
 
-        if user is None:
-            return generic_response
+    def test_inactive_user_blocked(self, client):
+        user = CustomUserFactory(is_active=False)
+        response = client.post(
+            self.url,
+            {
+                "email": user.email,
+                "password": "pass12345",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
-        if user.is_active:
-            return Response(
-                {"detail": "this account is already verified"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
 
-        token = generate_verification_token(user.id)
-        send_verification_email_task.delay(user.email, token)
+@pytest.mark.django_db
+class TestLogoutView:
+    url = reverse("users:api-v1:logout")
 
-        return generic_response
+    def test_missing_refresh_field_fails(self, client):
+        user = CustomUserFactory()
+        response = auth(client, user).post(self.url, {}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_success_blacklists_token(self, client):
+        user = CustomUserFactory()
+        refresh = RefreshToken.for_user(user)
+
+        response = auth(client, user).post(
+            self.url, {"refresh": str(refresh)}, format="json"
+        )
+        assert response.status_code == status.HTTP_205_RESET_CONTENT
+
+        # The blacklisted refresh token must no longer work
+        refresh_url = reverse("users:api-v1:token_refresh")
+        retry = client.post(refresh_url, {"refresh": str(refresh)}, format="json")
+        assert retry.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+@pytest.mark.django_db
+class TestVerifyEmailView:
+    url = reverse("users:api-v1:verify-email")
+
+    def test_missing_token_fails(self, client):
+        response = client.get(self.url)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_invalid_token_fails(self, client):
+        response = client.get(self.url, {"token": "does-not-exist"})
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_valid_token_activates_user(self, client):
+        user = CustomUserFactory(is_active=False)
+        # Simulate what generate_verification_token stores in the cache
+        cache.set("email_verify:good-token", user.id, timeout=900)
+
+        response = client.get(self.url, {"token": "good-token"})
+
+        assert response.status_code == status.HTTP_200_OK
+        user.refresh_from_db()
+        assert user.is_active is True
+        # The token is single-use, so it must be gone from the cache
+        assert cache.get("email_verify:good-token") is None
+
+
+@pytest.mark.django_db
+class TestResendVerificationEmailView:
+    url = reverse("users:api-v1:resend-verification-email")
+
+    def test_nonexistent_email_returns_generic_success(self, client):
+        # Same 200 response as a real email, to avoid leaking which emails exist
+        response = client.post(self.url, {"email": "nobody@example.com"}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_already_active_user_fails(self, client):
+        user = CustomUserFactory(is_active=True)
+        response = client.post(self.url, {"email": user.email}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    # Here the names are patched in views.py, where this view imports them
+    @patch("users.api.v1.views.send_verification_email_task")
+    @patch("users.api.v1.views.generate_verification_token")
+    def test_inactive_user_triggers_email(self, mock_token, mock_email, client):
+        mock_token.return_value = "tok"
+        user = CustomUserFactory(is_active=False)
+        response = client.post(self.url, {"email": user.email}, format="json")
+        assert response.status_code == status.HTTP_200_OK
+        mock_email.delay.assert_called_once()

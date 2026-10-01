@@ -5,6 +5,7 @@ psycopg2-binary==2.9.9
 pillow==12.3.0
 flake8
 black
+isort
 drf-yasg[validation]
 djangorestframework-simplejwt
 redis==5.0.1

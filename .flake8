@@ -1,4 +1,6 @@
 [flake8]
+max-line-length = 90
+
 exclude =
     .git,
     .gitignore,
@@ -10,3 +12,7 @@ exclude =
     settings.py,
     __init__,
     migrations,
+
+per-file-ignores =
+    */urls.py: E501
+    website/apps.py: F401

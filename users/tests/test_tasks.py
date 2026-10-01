@@ -4,34 +4,38 @@ import pytest
 from django.conf import settings
 from django.core import mail
 from django.utils import timezone
-from rest_framework_simplejwt.token_blacklist.models import (
-    OutstandingToken
-)
+from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
 
 from users.tasks import cleanup_expired_items, send_verification_email_task
 from users.tests.factories import CustomUserFactory
 
 
-
 def test_send_verification_email_contains_link():
-    send_verification_email_task('user@example.com', 'abc123')
+    # Called directly (not .delay), so it runs synchronously in the test
+    send_verification_email_task("user@example.com", "abc123")
 
+    # Django's test runner captures emails in mail.outbox
     assert len(mail.outbox) == 1
     sent = mail.outbox[0]
-    assert sent.to == ['user@example.com']
-    assert 'abc123' in sent.body
+    assert sent.to == ["user@example.com"]
+    assert "abc123" in sent.body
     assert settings.BACKEND_URL in sent.body
-
 
 
 @pytest.mark.django_db
 class TestCleanupExpiredItems:
     def _old_unverified_user(self, **overrides):
+        """Create an inactive user whose created_date is past the retention."""
         user = CustomUserFactory(
-            is_active=False, is_staff=False, is_superuser=False,
+            is_active=False,
+            is_staff=False,
+            is_superuser=False,
         )
-        old_date = timezone.now() - settings.UNVERIFIED_USER_RETENTION - timedelta(days=1)
+        old_date = (
+            timezone.now() - settings.UNVERIFIED_USER_RETENTION - timedelta(days=1)
+        )
         CustomUser = user.__class__
+        # created_date uses auto_now_add, so it can only be changed via update()
         CustomUser.objects.filter(pk=user.pk).update(created_date=old_date)
         user.refresh_from_db()
         return user
@@ -44,7 +48,7 @@ class TestCleanupExpiredItems:
         assert not user.__class__.objects.filter(pk=user.pk).exists()
 
     def test_keeps_recently_created_unverified_user(self):
-        user = CustomUserFactory(is_active=False)  # created_date = الان
+        user = CustomUserFactory(is_active=False)  # created_date = now
 
         cleanup_expired_items()
 
@@ -68,17 +72,25 @@ class TestCleanupExpiredItems:
 
     def test_deletes_expired_outstanding_tokens(self):
         user = CustomUserFactory()
+        # One token already expired, one still valid
         expired = OutstandingToken.objects.create(
-            user=user, jti='expired-jti', token='x',
-            created_at=timezone.now(), expires_at=timezone.now() - timedelta(days=1),
+            user=user,
+            jti="expired-jti",
+            token="x",
+            created_at=timezone.now(),
+            expires_at=timezone.now() - timedelta(days=1),
         )
         still_valid = OutstandingToken.objects.create(
-            user=user, jti='valid-jti', token='y',
-            created_at=timezone.now(), expires_at=timezone.now() + timedelta(days=1),
+            user=user,
+            jti="valid-jti",
+            token="y",
+            created_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(days=1),
         )
 
         cleanup_expired_items()
 
+        # Only the expired token should be removed
         assert not OutstandingToken.objects.filter(pk=expired.pk).exists()
         assert OutstandingToken.objects.filter(pk=still_valid.pk).exists()
 
@@ -87,5 +99,5 @@ class TestCleanupExpiredItems:
 
         result = cleanup_expired_items()
 
-        assert result['unverified_users'] == 1
-        assert result['expired_tokens'] == 0
+        assert result["unverified_users"] == 1
+        assert result["expired_tokens"] == 0

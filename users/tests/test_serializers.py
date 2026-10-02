@@ -3,13 +3,11 @@ from unittest.mock import patch
 import pytest
 from rest_framework.exceptions import AuthenticationFailed
 
-from users.api.v1.serializer import (
-    AdminUserSerializer,
-    ChangePasswordSerializer,
-    CustomTokenObtainPairSerializer,
-    RegistrationSerializer,
-    ResendVerificationEmailSerializer,
-)
+from users.api.v1.serializer import (AdminUserSerializer,
+                                     ChangePasswordSerializer,
+                                     CustomTokenObtainPairSerializer,
+                                     RegistrationSerializer,
+                                     ResendVerificationEmailSerializer)
 from users.tests.factories import CustomUserFactory
 
 

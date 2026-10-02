@@ -1,6 +1,6 @@
 import pytest
-from rest_framework.test import APIClient
 from django.core.cache import cache
+from rest_framework.test import APIClient
 
 
 @pytest.fixture

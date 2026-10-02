@@ -12,14 +12,10 @@ from users.models import CustomUser
 
 from ...tasks import send_verification_email_task
 from ..utils import generate_verification_token
-from .serializer import (
-    AdminUserSerializer,
-    ChangePasswordSerializer,
-    CustomTokenObtainPairSerializer,
-    CustomUserSerializer,
-    RegistrationSerializer,
-    ResendVerificationEmailSerializer,
-)
+from .serializer import (AdminUserSerializer, ChangePasswordSerializer,
+                         CustomTokenObtainPairSerializer, CustomUserSerializer,
+                         RegistrationSerializer,
+                         ResendVerificationEmailSerializer)
 
 
 class CreateCustomUserView(generics.CreateAPIView):

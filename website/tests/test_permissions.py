@@ -2,10 +2,7 @@ import pytest
 from rest_framework.test import APIRequestFactory
 
 from users.tests.factories import CustomUserFactory
-from website.api.v1.permissions import (
-    IsAdminOrTeacher,
-    IsOwner
-)
+from website.api.v1.permissions import IsAdminOrTeacher, IsOwner
 from website.tests.factories import TaskFactory
 
 # Builds fake requests without going through URL routing or middleware

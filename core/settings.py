@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import socket
 from datetime import timedelta
 from pathlib import Path
 
@@ -237,7 +238,6 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
-import socket
 
 # Debug toolbar only shows for these IPs. This is needed inside Docker, where
 # requests come from the container network (the gateway usually ends in ".1").

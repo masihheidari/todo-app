@@ -153,5 +153,5 @@ class TestCustomUserValidation:
             last_name="Y",
             email="x@example.com",
         )
-        # Should not raise
-        user.full_clean()
+        # password is not set in this test, so skip it in the validation
+        user.full_clean(exclude=["password"])

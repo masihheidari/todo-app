@@ -1,10 +1,16 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 
-from .views import (ChangePasswordView, CreateCustomUserView,
-                    CustomTokenObtainPairView, LogoutView,
-                    ResendVerificationEmailView, RetrieveUserView,
-                    UsersListView, VerifyEmailView)
+from .views import (
+    ChangePasswordView,
+    CreateCustomUserView,
+    CustomTokenObtainPairView,
+    LogoutView,
+    ResendVerificationEmailView,
+    RetrieveUserView,
+    UsersListView,
+    VerifyEmailView,
+)
 
 ...  # stray Ellipsis, harmless but can be removed
 

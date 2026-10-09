@@ -7,8 +7,11 @@ from website.cache_utils import task_list_cache_key
 from website.models import Task
 
 from .permissions import IsAdminOrTeacher, IsOwner
-from .serializer import (AdminTaskSerializer, StudentTaskSerializer,
-                         TeacherTaskSerializer)
+from .serializer import (
+    AdminTaskSerializer,
+    StudentTaskSerializer,
+    TeacherTaskSerializer,
+)
 
 
 class TaskModelViewSet(viewsets.ModelViewSet):
